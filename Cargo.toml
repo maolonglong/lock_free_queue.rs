@@ -1,0 +1,10 @@
+[package]
+name = "lock_free_queue"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+crossbeam = "0.8"
+
+[dev-dependencies]
+queuecheck = "0.1.1"
