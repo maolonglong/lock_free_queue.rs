@@ -1,17 +1,20 @@
 use crossbeam::epoch::{self, Atomic, Owned, Shared};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::{
+    mem::MaybeUninit,
+    sync::atomic::{AtomicUsize, Ordering},
+};
 
 type Link<T> = Atomic<Node<T>>;
 
 struct Node<T> {
-    elem: Option<T>,
+    elem: MaybeUninit<T>,
     next: Link<T>,
 }
 
 impl<T> Default for Node<T> {
     fn default() -> Self {
         Node {
-            elem: None,
+            elem: MaybeUninit::uninit(),
             next: Atomic::null(),
         }
     }
@@ -20,7 +23,7 @@ impl<T> Default for Node<T> {
 impl<T> Node<T> {
     fn new(elem: T) -> Self {
         Node {
-            elem: Some(elem),
+            elem: MaybeUninit::new(elem),
             next: Atomic::null(),
         }
     }
@@ -111,7 +114,7 @@ impl<T> LockFreeQueue<T> {
         loop {
             let head = self.head.load(Ordering::Acquire, guard);
             let tail = self.tail.load(Ordering::Acquire, guard);
-            let mut head_next = unsafe { (*head.as_raw()).next.load(Ordering::Acquire, guard) };
+            let head_next = unsafe { (*head.as_raw()).next.load(Ordering::Acquire, guard) };
             if head == self.head.load(Ordering::Acquire, guard) {
                 if head == tail {
                     if head_next.is_null() {
@@ -129,12 +132,12 @@ impl<T> LockFreeQueue<T> {
                     .compare_exchange(head, head_next, Ordering::Release, Ordering::Relaxed, guard)
                     .is_ok()
                 {
-                    let elem = unsafe { head_next.deref_mut().elem.take() };
-                    unsafe {
+                    let elem = unsafe {
                         guard.defer_destroy(head);
-                    }
+                        (*head_next.as_raw()).elem.assume_init_read()
+                    };
                     let _ = self.len.fetch_sub(1, Ordering::SeqCst);
-                    return elem;
+                    return Some(elem);
                 }
             }
         }
