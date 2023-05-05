@@ -1,8 +1,7 @@
+use std::mem::MaybeUninit;
+use std::sync::atomic::{AtomicUsize, Ordering};
+
 use crossbeam::epoch::{self, Atomic, Owned, Shared};
-use std::{
-    mem::MaybeUninit,
-    sync::atomic::{AtomicUsize, Ordering},
-};
 
 type Link<T> = Atomic<Node<T>>;
 
@@ -13,10 +12,7 @@ struct Node<T> {
 
 impl<T> Default for Node<T> {
     fn default() -> Self {
-        Node {
-            elem: MaybeUninit::uninit(),
-            next: Atomic::null(),
-        }
+        Self::dummy()
     }
 }
 
@@ -29,7 +25,10 @@ impl<T> Node<T> {
     }
 
     fn dummy() -> Self {
-        Self::default()
+        Node {
+            elem: MaybeUninit::uninit(),
+            next: Atomic::null(),
+        }
     }
 }
 
@@ -44,6 +43,12 @@ unsafe impl<T: Send> Sync for LockFreeQueue<T> {}
 
 impl<T> Default for LockFreeQueue<T> {
     fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<T> LockFreeQueue<T> {
+    pub fn new() -> Self {
         let head = Atomic::new(Node::dummy());
         let tail = head.clone();
         LockFreeQueue {
@@ -51,12 +56,6 @@ impl<T> Default for LockFreeQueue<T> {
             tail,
             len: AtomicUsize::new(0),
         }
-    }
-}
-
-impl<T> LockFreeQueue<T> {
-    pub fn new() -> Self {
-        Self::default()
     }
 
     pub fn is_empty(&self) -> bool {
@@ -158,11 +157,11 @@ impl<T> Drop for LockFreeQueue<T> {
 /// Copied from: https://github.com/ClSlaid/l3queue/blob/466f507186cd342e8eb886e79d209b7606460b30/src/he_queue.rs#L166-L333
 #[cfg(test)]
 mod tests {
+    use std::sync::atomic::AtomicI32;
+    use std::sync::{Arc, Barrier};
+    use std::thread;
+
     use super::*;
-    use std::{
-        sync::{atomic::AtomicI32, Arc, Barrier},
-        thread,
-    };
 
     #[test]
     fn test_single() {

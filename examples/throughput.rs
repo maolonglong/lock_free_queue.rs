@@ -1,9 +1,8 @@
+use std::collections::VecDeque;
+use std::sync::{Arc, Mutex};
+
 use lock_free_queue::LockFreeQueue;
 use queuecheck::queuecheck_bench_throughput;
-use std::{
-    collections::VecDeque,
-    sync::{Arc, Mutex},
-};
 
 fn main() {
     let ops: f64 = (0..100)
